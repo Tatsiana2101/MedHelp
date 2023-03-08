@@ -1,0 +1,229 @@
+﻿@page "/tolones"
+@layout MainLayout
+
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject IIgniteUIBlazor IgniteUIBlazor
+@inject IDoctorService _doctorService;
+@inject IAuthService _authService;
+@inject IPatientService _patientService;
+
+<div class="doctors">
+    <div class="container vertical plot">
+        <div class="container vertical" style="--use-accessibility:true;">
+            @if (tolonesView != null)
+            {
+                <div style="overflow: hidden">
+                    <IgbDataGrid Height="800px" 
+                                 Width="1200px"
+                                 DataSource="tolonesView"
+                                 AutoGenerateColumns="false"
+                                 SelectionMode="GridSelectionMode.SingleRow"
+                                 CellClicked="e => OnSelectRowClick(e)"
+                                 BorderWidthBottom=0
+                                 BorderWidthLeft=0
+                                 BorderWidthRight=0>
+                        <IgbTextColumn Field="PatientName" HeaderText="Имя пациента" Width="@("*>100")" HorizontalAlignment="CellContentHorizontalAlignment.Center" />
+                        <IgbTextColumn Field="DoctorSpecialisation" HeaderText="Специализация доктора" Width="@("*>100")" HorizontalAlignment="CellContentHorizontalAlignment.Center" />
+                        <IgbTextColumn Field="DoctorName" HeaderText="Имя доктора" Width="@("*>100")" HorizontalAlignment="CellContentHorizontalAlignment.Center" />
+                        <IgbDateTimeColumn Field="Time" HeaderText="Время" Width="@("*>100")" DateTimeFormat="DateTimeFormats.DateTimeShort" HorizontalAlignment="CellContentHorizontalAlignment.Center" />
+                        <IgbTextColumn Field="PatientNumberOfPhone" HeaderText="Номер пациента" Width="@("*>100")" HorizontalAlignment="CellContentHorizontalAlignment.Center" />
+                    </IgbDataGrid>
+                </div>
+            }
+        </div>
+        <div class="inputes">
+            @if (role == "doctor")
+            {
+                <select class="select" @bind="Patient">
+                    @if (patients != null)
+                    {
+                        @foreach (var patient in patients)
+                        {
+                            <option value="@patient.PatientId">@patient.FirstName</option>
+                        }
+                }
+                </select>
+            }
+            else
+            {
+                <select class="select" @onchange="async e => await FilterDoctor(e)">
+                    @if (specialisations != null)
+                    {
+                        @foreach (var speci in specialisations)
+                        {
+                            <option value="@speci">@speci</option>
+                        }
+                }
+                </select>
+                <select class="select" @bind="doctorId">
+                    @if (doctors != null)
+                    {
+                        @foreach (var doc in doctors)
+                        {
+                            <option value="@doc.DoctorId">@doc.FirstName</option>
+                        }
+                }
+                </select>
+            }
+            <input type="datetime" @bind="@Date"></input>
+            <button @onclick="async e => await AddTolon()">Добавить толон</button>
+            <button @onclick="async e => await DeleteTolon()">Удалить толон</button>
+            @if (role == "doctor")
+            {
+                <button @onclick="async e => await GetPatient()">Принять пациента</button>
+            }
+            <span>@errorMassage</span>
+        </div>
+    </div>
+</div>
+
+@code {
+    private DateTime Date { get; set; } = DateTime.Now;
+    private int Patient { get; set; }
+
+    private List<Tolon> tolones;
+    private List<TolonView> tolonesView;
+    private List<Patient> patients;
+    private List<Doctor> doctors;
+    private List<string> specialisations;
+
+    private string errorMassage;
+    private string role;
+    private string spec;
+    private int deletedId;
+    private int doctorId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var login = await localStorage.GetItemAsStringAsync("login");
+        login = login.Trim('\"');
+        role = await localStorage.GetItemAsStringAsync("role");
+        role = role.Trim('\"');
+        var user = await _authService.GetUser(login);
+        doctors = await _doctorService.GetDoctors();
+        specialisations = doctors.Select(doc => doc.Specialization).Distinct().ToList();
+
+        if (role == "doctor")
+            tolones = await _doctorService.GetTolones(user.Doctor.DoctorId);
+        else
+            tolones = await _patientService.GetTolones(user.Patient.PatientId);
+
+        tolonesView = tolones.Select(t => new TolonView()
+        {
+            PatientName = t.Patient.FirstName + " " + t.Patient.Name + " " + t.Patient.LastName,
+            DoctorName = t.Doctor.FirstName + " " + t.Doctor.Name + " " + t.Doctor.LastName,
+            DoctorSpecialisation = t.Doctor.Specialization,
+            Time = t.Time,
+            PatientNumberOfPhone = t.Patient.NumberOfPhone
+        }).ToList();
+
+        patients = await _patientService.GetPatients();
+        Patient = patients[0].PatientId;
+        doctorId = doctors[0].DoctorId;
+    }
+
+    private async Task FilterDoctor(ChangeEventArgs e)
+    {
+        doctors = await _doctorService.GetDoctors();
+        doctors = doctors.Where(doc => (string)doc.Specialization == (string)e.Value).ToList();
+        doctorId = doctors[0].DoctorId;
+        StateHasChanged();
+    }
+
+    private async Task ViewPatient()
+    {
+        var patient = tolones[deletedId].Patient;
+        await localStorage.SetItemAsStringAsync("patientId", patient.PatientId.ToString());
+        NavManager.NavigateTo("/tolones/patient");
+    }
+
+    private async Task GetPatient()
+    {
+        var patient = tolones[deletedId].Patient;
+        var tolon = tolones[deletedId];
+        await localStorage.SetItemAsStringAsync("patientId", patient.PatientId.ToString());
+        await localStorage.SetItemAsStringAsync("tolonId", tolon.TolonId.ToString());
+        NavManager.NavigateTo("/tolones/visit");
+    }
+
+    private async Task DeleteTolon()
+    {
+        var tolon = tolones[deletedId];
+        await _doctorService.DeleteTolon(tolon.TolonId);
+
+        if (role == "doctor")
+            tolones = await _doctorService.GetTolones(tolon.Doctor.DoctorId);
+        else
+            tolones = await _patientService.GetTolones(tolon.Patient.PatientId);
+
+        tolonesView = tolones.Select(t => new TolonView()
+        {
+            PatientName = t.Patient.FirstName + " " + t.Patient.Name + " " + t.Patient.LastName,
+            DoctorName = t.Doctor.FirstName + " " + t.Doctor.Name + " " + t.Doctor.LastName,
+            DoctorSpecialisation = t.Doctor.Specialization,
+            Time = t.Time,
+            PatientNumberOfPhone = t.Patient.NumberOfPhone
+        }).ToList();
+
+        errorMassage = string.Empty;
+
+        StateHasChanged();
+    }
+
+    private async Task AddTolon()
+    {
+        if (Date < DateTime.Now)
+        {
+            errorMassage = "Толон не может быть на прошедшее время";
+            return;
+        }
+
+        var login = await localStorage.GetItemAsStringAsync("login");
+        login = login.Trim('\"');
+        Doctor doctor;
+        Patient patient;
+
+        if (role == "doctor")
+        {
+            doctor = (await _authService.GetUser(login)).Doctor;
+            patient = await _patientService.GetPatient(Patient);
+        }
+        else
+        {
+            doctor = (await _doctorService.GetDoctors()).FirstOrDefault(doc => doc.DoctorId == doctorId);
+            patient = (await _patientService.GetPatients()).FirstOrDefault(pac => pac.User.Login == login);
+        }
+
+        var tolon = new Tolon()
+        {
+            Patient = patient,
+            Doctor = doctor,
+            Time = Date,
+        };
+
+        await _doctorService.AddTolon(tolon);
+
+        if (role == "doctor")
+            tolones = await _doctorService.GetTolones(tolon.Doctor.DoctorId);
+        else
+            tolones = await _patientService.GetTolones(tolon.Patient.PatientId);
+
+        tolonesView = tolones.Select(t => new TolonView()
+        {
+            PatientName = t.Patient.FirstName + " " + t.Patient.Name + " " + t.Patient.LastName,
+            DoctorName = t.Doctor.FirstName + " " + t.Doctor.Name + " " + t.Doctor.LastName,
+            DoctorSpecialisation = t.Doctor.Specialization,
+            Time = t.Time,
+            PatientNumberOfPhone = t.Patient.NumberOfPhone
+        }).ToList();
+
+        errorMassage = string.Empty;
+
+        StateHasChanged();
+    }
+
+    private void OnSelectRowClick(IgbGridCellEventArgs e)
+    {
+        deletedId = e.CellInfo.DataRow;
+    }
+}

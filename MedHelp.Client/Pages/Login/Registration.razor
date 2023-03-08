@@ -1,0 +1,102 @@
+﻿@page "/registration"
+@using System.Text.RegularExpressions
+@layout LoginLayout
+
+@inject IAuthService _authService
+@inject IBasicService _basicService
+
+<div class="login-form">
+    <span class="input">Регистрация</span>
+    <div class="inputs">
+        <span class="lables">Логин</span>
+        <input type="text" @bind="@LoginField"></input>
+
+        <span class="lables">Пароль</span>
+        <input type="password" @bind="@PasswordField"></input>
+
+        <span class="lables">Имя</span>
+        <input type="text" @bind="@NameField"></input>
+
+        <span class="lables">Фамилия</span>
+        <input type="password" @bind="@FirstNameField"></input>
+
+        <span class="lables">Отчество</span>
+        <input type="text" @bind="@LastNameField"></input>
+
+        <span class="lables">Номер телефона</span>
+        <input type="password" @bind="@NumberOfPhoneField"></input>
+
+        <span class="lables">Пол</span>
+        <select class="select" @bind="SexField">
+            @if (listOfSexes != null)
+            {
+                @foreach (var sex in listOfSexes)
+                {
+                    <option value="@sex.Value">@sex.Value</option>
+                }
+            }
+        </select>
+        <div class="forgotPasswordPlace">
+            <a href="/login" class="registrationLink">Есть аккаунт?</a>
+        </div>
+        <span class="error">@errorMassage</span>
+    </div>
+    <button @onclick="async e => await RegistrationAsync()">Регистрация</button>
+</div>
+
+@code {
+    private string LoginField { get; set; }
+    private string PasswordField { get; set; }
+    private string NameField { get; set; }
+    private string FirstNameField { get; set; }
+    private string LastNameField { get; set; }
+    private string NumberOfPhoneField { get; set; }
+    private string SexField { get; set; } = "male";
+
+    private List<Sex> listOfSexes;
+    private string errorMassage;
+
+    private Regex regexForNumberPhone = new Regex(@"^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private Regex regexForText = new Regex(@"^[а-яА-Я ]*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        listOfSexes = await _basicService.GetAllSexes();
+    }
+
+    private async Task RegistrationAsync()
+    {
+        if (string.IsNullOrWhiteSpace(LoginField) || string.IsNullOrWhiteSpace(PasswordField) || string.IsNullOrWhiteSpace(NameField) || string.IsNullOrWhiteSpace(FirstNameField) || string.IsNullOrWhiteSpace(LastNameField) || string.IsNullOrWhiteSpace(NumberOfPhoneField))
+        {
+            errorMassage = "Введите все данные";
+            return;
+        }
+
+        if (!regexForNumberPhone.IsMatch(NumberOfPhoneField) || !regexForText.IsMatch(NameField) || !regexForText.IsMatch(FirstNameField) || !regexForText.IsMatch(LastNameField))
+        {
+            errorMassage = "Формат ввода не верный";
+            return;
+        }
+
+        var registrationModel = new RegistrationUser()
+            {
+                Login = LoginField,
+                Password = PasswordField,
+                Name = NameField,
+                FirstName = FirstNameField,
+                LastName = LastNameField,
+                NumberOfPhone = NumberOfPhoneField,
+                Sex = SexField
+            };
+
+        var id = await _authService.Registration(registrationModel);
+
+        if (id < 1)
+        {
+            errorMassage = "Что-то пошло не так";
+            return;
+        }
+
+        NavManager.NavigateTo("/login");
+    }
+}

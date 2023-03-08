@@ -1,0 +1,89 @@
+﻿@page "/visites"
+@layout MainLayout
+
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject IIgniteUIBlazor IgniteUIBlazor
+@inject IDoctorService _doctorService;
+@inject IPatientService _patientService;
+
+<div class="container vertical plot">
+        <div class="container vertical" style="--use-accessibility:true;">
+            @if (receptionsView != null)
+            {
+                <div style="overflow: hidden">
+                    <IgbDataGrid Height="800px" 
+                                 Width="1200px"
+                                 DataSource="receptionsView"
+                                 AutoGenerateColumns="false"
+                                 SelectionMode="GridSelectionMode.SingleRow"
+                                 BorderWidthBottom=0
+                                 BorderWidthLeft=0
+                                 BorderWidthRight=0>
+                        @if (role == "doctor")
+                        {
+                            <IgbTextColumn Field="DoctorName" HeaderText="Пациент" Width="@("*>100")" HorizontalAlignment="CellContentHorizontalAlignment.Center" />
+                        }
+                        else
+                        {
+                            <IgbTextColumn Field="DoctorName" HeaderText="Доктор" Width="@("*>100")" HorizontalAlignment="CellContentHorizontalAlignment.Center" />
+                        }
+                        <IgbTextColumn Field="Specialization" HeaderText="Специализация" Width="@("*>100")" HorizontalAlignment="CellContentHorizontalAlignment.Center" />
+                        <IgbDateTimeColumn Field="Time" HeaderText="Дата" Width="@("*>100")" DateTimeFormat="DateTimeFormats.DateTimeShort" HorizontalAlignment="CellContentHorizontalAlignment.Center" />
+                        <IgbTextColumn Field="NameOfIl" HeaderText="Болезнь" Width="@("*>100")" HorizontalAlignment="CellContentHorizontalAlignment.Center" />
+                        <IgbTextColumn Field="Description" HeaderText="Симптомы" Width="@("*>100")" HorizontalAlignment="CellContentHorizontalAlignment.Center" />
+                        <IgbTextColumn Field="Conclusion" HeaderText="Лечение" Width="@("*>100")" HorizontalAlignment="CellContentHorizontalAlignment.Center" />
+                    </IgbDataGrid>
+                </div>
+            }
+        </div>
+    </div>
+
+@code {
+    private string role;
+    private string login;
+    private Doctor doctor;
+    private Patient patient;
+    private List<Reception> receptions;
+    private List<ReceptionView> receptionsView;
+
+    protected override async Task OnInitializedAsync()
+    {
+        role = await localStorage.GetItemAsStringAsync("role");
+        login = await localStorage.GetItemAsStringAsync("login");
+        role = role.Trim('\"');
+        login = login.Trim('\"');
+
+        if (role == "doctor")
+        {
+            doctor = (await _doctorService.GetDoctors()).FirstOrDefault(doc => doc.User.Login == login);
+            receptions = await _doctorService.GetReceptions(doctor.DoctorId);
+
+            receptionsView = receptions.Select(rec => new ReceptionView()
+                {
+                    DoctorName = rec.Tolon.Patient.FirstName + " " + rec.Tolon.Patient.Name + " " + rec.Tolon.Patient.LastName,
+                    Specialization = rec.Tolon.Doctor.Specialization,
+                    Time = rec.Tolon.Time,
+                    NameOfIl = rec.Disease.Name,
+                    Description = rec.Disease.Description,
+                    Conclusion = rec.Disease.Conclusion
+                }).ToList();
+        }
+        else
+        {
+            patient = (await _patientService.GetPatients()).FirstOrDefault(pac => pac.User.Login == login);
+            receptions = await _patientService.GetReceptions(patient.PatientId);
+
+            receptionsView = receptions.Select(rec => new ReceptionView()
+                {
+                    DoctorName = rec.Tolon.Doctor.FirstName + " " + rec.Tolon.Doctor.Name + " " + rec.Tolon.Doctor.LastName,
+                    Specialization = rec.Tolon.Doctor.Specialization,
+                    Time = rec.Tolon.Time,
+                    NameOfIl = rec.Disease.Name,
+                    Description = rec.Disease.Description,
+                    Conclusion = rec.Disease.Conclusion
+                }).ToList();
+        }
+
+
+    }
+}
